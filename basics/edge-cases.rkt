@@ -12,8 +12,8 @@ Coin("fair") :: 0.5.
 Certain("a").
 Certain("b") :: 1.
 
-% Probability 0 is allowed. Not the same as leaving the fact out: the
-% key exists, so the value index and the arity check both see it.
+% Probability 0 is allowed. Not quite the same as leaving the fact
+% out: the predicate is still declared, so the arity check sees it.
 Impossible("c") :: 0.
 
 % Any precision works; what isn't allowed is dropping the leading

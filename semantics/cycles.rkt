@@ -1,7 +1,7 @@
 #lang roulette/example/probalog
 
-% Recursion in every shape the fixpoint loop has to cope with. Not a
-% model of anything -- each section aims at one part of the engine.
+% Recursion in every shape. Not a model of anything -- each section
+% isolates one kind.
 
 % ======================================================================
 % 1. A cyclic graph
@@ -12,11 +12,8 @@
 %     4 -> 4                    an isolated self-loop
 %     3 -> 5                    a tail: reachable, reaches nothing
 %
-% Cycles are what make this a fixpoint computation, and what makes the
-% probabilistic version need a solver: going round keeps adding
-% syntactically new disjuncts to a guard long after it stops meaning
-% anything new, so the loop can only tell it's done by checking
-% logical equivalence.
+% Going round a cycle re-derives the same facts by ever longer routes,
+% none of which change the answer once the shorter ones are known.
 %
 % Node names are numbers here rather than strings; an argument may be
 % a string, an integer, or a decimal.
@@ -41,9 +38,8 @@ Reach(x, z) :- Reach(x, y), Link(y, z).
 ? Reach(0, 5).
 ? Reach(5, 0).      % #f: node 5 has no outgoing links
 
-% Node 4's self-loop is its own little fixpoint -- derivable once,
-% then re-derived forever unless equivalence checking notices that
-% (|| v (&& v v) ...) stopped growing in meaning after the first step.
+% Node 4's self-loop reaches itself, and re-reaching itself any number
+% of times adds nothing to the probability.
 ? Reach(4, 4).      % 0.7
 ? Reach(4, 0).      % #f
 
@@ -57,14 +53,13 @@ SelfLooping(x) :- Link(x, x).
 ? SelfLooping(0).   % #f
 
 % --- Constants in clause position -------------------------------------
-% A literal in a body clause is a known value at match time, which is
-% what the per-position value index is for: `Link(0, y)` looks up only
-% the facts with 0 at position 0 instead of scanning all of Link.
+% A literal in a body clause restricts the match: `Link(0, y)` ranges
+% only over the links out of node 0.
 
 FromZero(y) :- Link(0, y).
 IntoZero(x) :- Link(x, 0).
-% Two constants and no variables at all: a nullary head whose guard is
-% a single conjunction.
+% Two constants and no variables at all: a nullary head that holds
+% when both named links do.
 ZeroToTwo() :- Link(0, 1), Link(1, 2).
 
 ? FromZero(1).
@@ -111,10 +106,10 @@ Even(y) :- Odd(x),  Step(x, y).
 % 3. Non-linear recursion
 % ======================================================================
 %
-% Both body clauses of the second rule are recursive, so semi-naive
-% evaluation has to try each clause position in turn as the one drawing
-% from the latest delta -- a new derivation may use fresh facts on the
-% left, the right, or both. A linear rule only ever needs delta left.
+% Both body clauses of the second rule are recursive, rather than one
+% recursive clause and one base relation. It computes the same
+% transitive closure by combining two derived pairs instead of
+% extending one by an edge.
 
 Hop(0, 1) :: 0.9.
 Hop(1, 2) :: 0.9.
@@ -129,7 +124,6 @@ Trans(x, z) :- Trans(x, y), Trans(y, z).
 ? Trans(3, 2).      % 0.729, the other way round
 
 % Same relation and same probabilities as the linear formulation would
-% give on this graph; the difference is only in how many rounds and
-% redundant derivations it takes. (Not comparable to Reach above,
-% which runs on a graph with extra chords.)
+% give on this graph. (Not comparable to Reach above, which runs on a
+% graph with extra chords.)
 ? Trans(1, 0).      % 0.729

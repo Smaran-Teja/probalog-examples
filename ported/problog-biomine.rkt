@@ -9,10 +9,9 @@
 %
 % That question is exactly the disjoint-sum problem. Candidate paths
 % through a network like this overlap heavily, so multiplying each
-% path's probability and adding them up overcounts badly. Probalog's
-% guards keep the sharing, so the answer is the true probability that
-% *some* path survives. See semantics/correlation.rkt for the
-% mechanism in isolation.
+% path's probability and adding them up overcounts badly. The answer
+% below is the true probability that *some* path survives. See
+% semantics/correlation.rkt for the same point in isolation.
 
 % --- The network -------------------------------------------------------
 %

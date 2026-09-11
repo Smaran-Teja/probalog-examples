@@ -1,12 +1,11 @@
-# Probalog examples
+# Probalog examples and benchmarks
 
 Example programs for `#lang roulette/example/probalog`, a probabilistic
-Datalog built on [Roulette](https://github.com/Smaran-Teja/roulette).
-The engine, its language reference and its implementation notes live in
-`roulette/roulette/example/probalog/`.
+Datalog built on [Roulette](https://github.com/Smaran-Teja/roulette),
+together with benchmarks comparing it against ProbLog, cplint/PITA and
+Soufflé.
 
-Install the language first, from the root of a roulette checkout on the
-`visualizations` branch:
+Install the language first, from the root of a roulette checkout:
 
 ```
 raco pkg install --auto roulette/ roulette-lib/
@@ -53,7 +52,8 @@ Realistic models, each ending in a set of observations and posteriors.
 
 ## `semantics/`
 
-Why the engine computes what it computes.
+What the language computes, in cases where the answer is easy to get
+wrong.
 
 | file                                          | what it shows                                                                                       |
 | --------------------------------------------- | --------------------------------------------------------------------------------------------------- |
@@ -63,10 +63,9 @@ Why the engine computes what it computes.
 ## `ported/`
 
 Standard examples from Soufflé and ProbLog, brought over unchanged
-where the language allows it. Each file notes what had to be adapted,
-which is often the most informative part: probalog puts probabilities
-on facts rather than rules, and has no negation, no disequality and no
-annotated disjunctions.
+where the language allows it. Each file notes what had to be adapted:
+probalog puts probabilities on facts rather than rules, and has no
+negation, no disequality and no annotated disjunctions.
 
 | file                                                            | ported from                                                            | what it shows                                                                          |
 | ---------------------------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
@@ -83,27 +82,29 @@ all: mutually exclusive states need negation or annotated
 disjunctions, so [problog-epidemic.rkt](ported/problog-epidemic.rkt)
 uses a monotone process instead, and says why.
 
-## `library/`
-
-| file                            | what it shows                                                                                                                 |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| [api.rkt](library/api.rkt)      | probalog from Racket: the database as a symbolic set, set operations returning *distributions*, `observe-guard`, `run-datalog` |
-
 ## `bench/`
 
 | file                                                     | what it shows                                                                              |
 | -------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| [probalog-examples.rkt](bench/probalog-examples.rkt)     | four generated program families with per-phase timing instrumentation                      |
-| [probalog-plot.rkt](bench/probalog-plot.rkt)             | where the time goes: matching, guard construction, fixpoint equality, indexing, unions     |
 | [compare-problog.sh](bench/compare-problog.sh)           | sets up ProbLog in a local virtualenv and runs the comparison — the entry point            |
 | [compare-problog.py](bench/compare-problog.py)           | probalog against ProbLog on matched programs: wall time, and whether they agree            |
+| [compare-cplint.sh](bench/compare-cplint.sh)             | the same against cplint/PITA — the entry point                                             |
+| [compare-cplint.py](bench/compare-cplint.py)             | probalog against PITA                                                                      |
 | [compare-souffle.sh](bench/compare-souffle.sh)           | the same against Soufflé — the entry point                                                 |
 | [compare-souffle.py](bench/compare-souffle.py)           | probalog against Soufflé, run with and without probability annotations                     |
+| [probalog-examples.rkt](bench/probalog-examples.rkt)     | four generated program families with per-phase timing instrumentation                      |
+| [probalog-plot.rkt](bench/probalog-plot.rkt)             | a stacked-bar plot of that timing                                                          |
+
+`compare-cplint.py` imports its program generators from
+`compare-problog.py`, so those two run byte-identical models.
+`compare-souffle.py` has its own, because Soufflé needs type
+declarations and an output relation rather than a query — the program
+shapes match but the code is separate.
 
 `probalog-plot.rkt` opens a plot window, and requiring it runs the
 benchmarks first.
 
-### Comparing against ProbLog
+### Against ProbLog
 
 `compare-problog.py` generates the same model in both syntaxes, runs
 both systems, and checks the answers against each other and against a
@@ -119,45 +120,93 @@ the install (about 13 seconds). Arguments pass straight through:
 
 ```
 ./bench/compare-problog.sh                            # every suite
-./bench/compare-problog.sh dag smokers --timeout 120  # named suites
+./bench/compare-problog.sh dag smokers --timeout 30   # named suites
 ./bench/compare-problog.sh chordring --verify         # add Monte Carlo
+./bench/compare-problog.sh --all-queries              # equal-work mode
 ./bench/compare-problog.sh --rebuild                  # reinstall
 ```
 
-Two things it found, on one machine with ProbLog 2.2.10:
+`--all-queries` matters for reading the numbers honestly. ProbLog and
+PITA are goal-directed: they ground only what the query needs.
+probalog computes the entire relation whatever you ask it. So the
+default single-query mode charges probalog for work its opponents
+never do, and `--all-queries` asks both for the whole relation
+instead. On a 20-node ring:
 
-**Probalog agreed with ProbLog on every program tested**, and was
-right where ProbLog was wrong. ProbLog's *default* knowledge compiler
-is dsharp, and on the 16-node chorded ring it reports `13659.889` as a
-probability. Probalog gives 0.938658, ProbLog's SDD backend gives
-0.9386584, and a 2M-trial Monte Carlo gives 0.9388. Hence the `pysdd`
-install above and the `-k sdd` this script passes; `--backend ddnnf`
-reproduces the bad answer.
+|                | 1 query | all 400 tuples |
+| -------------- | ------: | -------------: |
+| probalog       |   0.70s |          0.84s |
+| ProbLog (sdd)  |   0.12s |          0.17s |
 
-**Performance splits by program shape**, and not in one direction:
+probalog barely notices the extra 399 queries, because it had already
+computed the whole relation and a marginal is a weighted count over a
+diagram that already exists. ProbLog grows with the number of goals.
+The gap closes slowly at these sizes; it is the trend that differs,
+not yet the totals.
 
-| workload              | ProbLog (sdd) | probalog |                       |
-| --------------------- | -------------: | --------: | --------------------- |
-| layered DAG (7,5)     |        36.09s |    1.03s | probalog 35x faster   |
-| layered DAG (6,6)     |       110.63s |    2.42s | probalog 46x faster   |
-| chorded ring, n=16    |         0.08s |    3.09s | probalog 39x slower   |
-| smokers ring, n=16    |         0.08s |   67.59s | probalog 836x slower  |
-| smokers ring, n=20    |         0.12s |  timeout | —                     |
+**Correctness.** probalog agreed with ProbLog on every program tested,
+and disagreed only where ProbLog was wrong: ProbLog's *default*
+knowledge compiler is dsharp, and on the 16-node chorded ring it
+reports `13659.889` as a probability. probalog gives 0.938658,
+ProbLog's SDD backend gives 0.9386584, and a 2M-trial Monte Carlo
+gives 0.9388. Hence the `pysdd` install and the `-k sdd` this script
+passes; `--backend ddnnf` reproduces the bad answer.
 
-Probalog wins on wide, acyclic, heavily-converging derivation — the
-case its BDD guards and `for/sym-set/fast` merging were built for, and
-where SDD compilation blows up instead. It loses, exponentially, on
-recursion through cycles: the smokers ring costs 0.95s at 12 people
-and 18.8s at 15, while ProbLog stays flat at 0.08s.
+**Timings**, single query, 10s timeout:
 
-That split follows from the architecture. Probalog carries symbolic
-guards *through* the Datalog fixpoint, so every round accumulates
-redundant disjuncts and needs solver calls to decide it has converged.
-ProbLog separates the phases: ground first with no probabilistic
-reasoning, then compile once and do weighted model counting. Cycles
-cost probalog on every round and cost ProbLog only once.
+| workload           | ProbLog (sdd) | probalog |
+| ------------------ | ------------: | -------: |
+| layered DAG (6,5)  |         1.45s |    1.07s |
+| layered DAG (7,5)  |       timeout |    1.70s |
+| layered DAG (6,6)  |       timeout |    4.64s |
+| chorded ring n=16  |         0.12s |    1.06s |
+| smokers ring n=13  |         0.09s |    0.87s |
+| smokers ring n=14  |         0.08s |    0.79s |
+| smokers ring n=15  |         0.07s |    0.82s |
 
-### Comparing against Soufflé
+probalog wins on the layered DAGs and loses everywhere else. ProbLog
+times out from DAG (7,5) upward, where probalog is still under two
+seconds.
+
+Everywhere else probalog is flat but offset. The smokers ring does not
+grow with n at all — 0.84 / 0.95 / 0.87 / 0.79 / 0.82s for n=10 through
+15 — and roughly 0.3s of each of those is Racket starting up, so what
+is left is a constant few hundred milliseconds against ProbLog's
+constant 0.08s. Compiling guards as the derivation proceeds is what
+makes those curves flat; the residual gap is a constant factor, not a
+growth rate.
+
+### Against cplint/PITA
+
+```
+./bench/compare-cplint.sh --quick
+```
+
+The wrapper installs SWI-Prolog's `cplint` pack on first run. Note
+that cplint is Prolog rather than Datalog; every program here is in
+the function-free fragment, so it does not bias the result, but PITA
+is solving a more general problem than it needs to. PITA is also
+goal-directed, so `--all-queries` applies here too.
+
+**PITA agreed with probalog on all 19 configurations.** With ProbLog,
+Soufflé and Monte Carlo, that is four independent confirmations.
+
+| workload           |    PITA | probalog |
+| ------------------ | ------: | -------: |
+| ring (20)          |   0.17s |    0.79s |
+| chorded ring (16)  |   0.19s |    1.07s |
+| layered DAG (6,5)  | timeout |    1.27s |
+| layered DAG (6,6)  | timeout |    4.23s |
+| smokers ring (15)  |   0.22s |    0.80s |
+
+PITA times out on the same DAGs ProbLog struggled with, from (6,5)
+upward. On the smokers ring it is flat at ~0.20s across every size, as
+is probalog at 0.80–0.89s. PITA is the closest comparison here: it
+uses the same strategy of carrying a compiled representation through
+the derivation rather than compiling an accumulated formula at the
+end, which is why both curves are flat.
+
+### Against Soufflé
 
 ```
 brew install souffle
@@ -166,41 +215,35 @@ brew install souffle
 
 Soufflé is pure Datalog with no notion of probability, so this runs
 probalog *twice* on each program: once with facts left unannotated
-(probability 1, which produces concrete `#t` guards — probalog doing
-plain Datalog) and once with every fact at `:: 0.5`. Same facts, same
-rules, same fixpoint, same derived relation. The only difference is
-whether the guards are symbolic, which isolates **the price of
-uncertainty** from every other cost.
+(probability 1) and once with every fact at `:: 0.5`. Same facts, same
+rules, same fixpoint, same derived relation — the only difference is
+whether the probabilities are trivial, which isolates what uncertainty
+costs from every other factor.
 
-Two results, across five program families and 20 configurations:
+**probalog derived exactly the relation Soufflé did, every time** —
+across five program families and 20 configurations, up to 5461 tuples.
+Since the suites include `sg` and Andersen's points-to, that is a
+reasonable check against a mature engine.
 
-**probalog@1 derived exactly the relation Soufflé did, every time** —
-up to 5461 tuples. Since the suites include `sg` and Andersen's
-points-to, that is a decent check of the Datalog core against a mature
-engine.
+The `cost of probability` is probalog@0.5 divided by probalog@1:
 
-**What probability costs depends entirely on program shape:**
+| suite          | relation | prob cost |
+| -------------- | -------: | --------: |
+| pointsto (16)  |      289 |  **1.0x** |
+| sg (depth 6)   |     5461 |      1.1x |
+| ring (60)      |     3600 |  **1.0x** |
+| chordring (16) |      256 |      1.4x |
+| chordring (20) |      400 |      2.8x |
+| dag (6,6)      |      613 |      4.8x |
 
-| suite      | relation | probalog@1 | probalog@0.5 | cost of probability |
-| ---------- | --------: | ---------: | ------------: | ------------------- |
-| pointsto (16) |      289 |      0.48s |         0.64s | 1.3x                |
-| sg (depth 6)  |     5461 |      0.63s |         1.36s | 2.2x                |
-| ring (60)     |     3600 |      1.02s |         1.63s | 1.6x                |
-| dag (6,6)     |      613 |      0.53s |         2.19s | 4.2x                |
-| chordring (16)|      256 |      0.50s |         3.62s | 7.3x                |
-| chordring (20)|      400 |      0.42s |       timeout | —                   |
+On chains, trees and program analysis, probability is free —
+points-to, same-generation and the 60-node ring cost the same at 0.5
+as at 1, even at 5461 tuples. Dense cyclic graphs and wide converging
+DAGs are where it is paid for.
 
-Chains, trees and DAGs are cheap: points-to and same-generation pay
-almost nothing for going probabilistic, even at 5461 tuples. Dense
-cyclic graphs are where it goes wrong, and the last row is the clearest
-statement of it — probalog computes all 400 tuples of that relation in
-0.42s with certain facts and cannot finish in two minutes with
-uncertain ones. Nothing changed but the guards.
-
-Note that probalog@1 is essentially flat and startup-dominated
-throughout (~0.3s of the time is Racket booting), so the Datalog core
-itself is not what costs. Soufflé runs at 0.04–0.06s here, also mostly
-startup; `souffle -c` compiles to C++ and would widen the gap further.
+probalog@1 is otherwise flat and startup-dominated (~0.3s of it is
+Racket booting). Soufflé runs at 0.04–0.06s here, also mostly startup;
+`souffle -c` compiles to C++ and would widen the gap further.
 
 ## Reading the output
 

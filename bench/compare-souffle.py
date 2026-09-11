@@ -5,21 +5,19 @@ Souffle is a pure Datalog engine with no notion of probability, so the
 comparison runs probalog *twice* on each program:
 
   probalog@1     every fact declared with no annotation, so probability
-                 1. Probability-1 facts get concrete `#t` guards rather
-                 than symbolic ones, so this is probalog doing plain
-                 Datalog, and is directly comparable to Souffle.
+                 1 -- plain Datalog, directly comparable to Souffle.
 
-  probalog@0.5   every fact annotated `:: 0.5`. Same derivations, same
-                 fixpoint, but now every guard is a symbolic formula.
+  probalog@0.5   every fact annotated `:: 0.5`. Same facts, same rules,
+                 same derived relation, but the probabilities are no
+                 longer trivial.
 
-The gap between Souffle and probalog@1 is the cost of probalog's
-machinery -- an interpreter in Racket against compiled C++. The gap
-between probalog@1 and probalog@0.5 is the cost of probability itself,
-which is the number this repository actually cares about.
+The gap between Souffle and probalog@1 is the cost of running an
+interpreter in Racket against compiled C++. The gap between probalog@1
+and probalog@0.5 isolates what uncertainty costs from every other
+factor, which is the number this comparison is for.
 
-Souffle computes the whole relation; probalog saturates the whole
-database and then queries one fact. Both do the full fixpoint, so the
-work compared is the same.
+Both systems compute the whole relation, so the work compared is the
+same.
 
 Setup
 -----
@@ -304,8 +302,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("suites", nargs="*", choices=list(SUITES) + [])
     ap.add_argument("--quick", action="store_true", help="small sizes only")
-    ap.add_argument("--timeout", type=float, default=60,
-                    help="per-run timeout in seconds (default 60)")
+    ap.add_argument("--timeout", type=float, default=10,
+                    help="per-run timeout in seconds (default 10)")
     args = ap.parse_args()
 
     if shutil.which(RACKET) is None:
@@ -315,9 +313,8 @@ def main():
                  "  brew install souffle")
 
     print("probalog vs Souffle")
-    print("  probalog@1    facts with no annotation: probability 1, concrete")
-    print("                guards -- probalog doing plain Datalog")
-    print("  probalog@0.5  every fact :: 0.5: same fixpoint, symbolic guards")
+    print("  probalog@1    facts with no annotation: plain Datalog")
+    print("  probalog@0.5  every fact :: 0.5: same relation, uncertain")
     print("  prob cost     probalog@0.5 / probalog@1, the price of uncertainty")
     print("Souffle runs interpreted; `souffle -c` compiles to C++ and is faster")
     print("still. Racket startup is ~0.3s, Souffle's ~0.02s, so sub-second")

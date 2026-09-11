@@ -1,10 +1,8 @@
 #lang roulette/example/probalog
 
-% Why the guard on a derived fact is a formula over the base facts'
-% random variables and not a number: derivations that share base
-% facts have to be handled exactly. This is the "disjoint-sum
-% problem", and the reason a naive engine that multiplies and adds as
-% it goes gets wrong answers.
+% Derivations that share base facts have to be combined exactly. This
+% is the "disjoint-sum problem", and the reason an engine that just
+% multiplies and adds probabilities as it goes gets wrong answers.
 %
 % Each section is a program with a hand-computable answer, next to
 % what a rule-at-a-time engine would produce instead.
@@ -33,8 +31,8 @@ IPath(x, z) :- IPath(x, y), IEdge(y, z).
 %                            SEdge("s","m") holds.
 %
 % Treating the two derivations as independent 0.5 events would give
-% 1 - 0.5^2 = 0.75. The guard here is a disjunction of two
-% conjunctions naming the *same* variable, and the solver sees that.
+% 1 - 0.5^2 = 0.75. They are not independent: both depend on the same
+% edge, and the answer reflects that.
 
 SEdge("s", "m") :: 0.5.
 SEdge("m", "a").
@@ -64,7 +62,7 @@ PPath(x, z) :- PPath(x, y), PEdge(y, z).
 ? PPath("s", "t").          % 0.8 * (1 - 0.4*0.4) = 0.672
 
 % --- 4. A fact used twice in one rule body ----------------------------
-% The guard is (&& v v), which is just v -- idempotent, not squared.
+% Requiring the same fact twice is the same as requiring it once.
 
 Risk("host") :: 0.4.
 DoubleRisk(x) :- Risk(x), Risk(x).
@@ -73,9 +71,9 @@ DoubleRisk(x) :- Risk(x), Risk(x).
 
 % --- 5. Two declarations of the same fact -----------------------------
 % Each `::` statement is its own independent coin flip, even when two
-% of them name the same fact, and the guards get unioned. Worth
-% knowing before writing it by accident: two lines that look like a
-% restatement are two chances at it.
+% of them name the same fact, so the fact holds if either came up
+% heads. Worth knowing before writing it by accident: two lines that
+% look like a restatement of one probability are two chances at it.
 
 Twice("x") :: 0.5.
 Twice("x") :: 0.5.
@@ -83,7 +81,7 @@ Twice("x") :: 0.5.
 ? Twice("x").               % 1 - 0.5*0.5 = 0.75
 
 % --- 6. A rule that re-derives a base fact ----------------------------
-% Same mechanism, across a fact and a rule rather than two facts.
+% Same thing, across a fact and a rule rather than two facts.
 
 Direct("y")   :: 0.5.
 Indirect("y") :: 0.5.

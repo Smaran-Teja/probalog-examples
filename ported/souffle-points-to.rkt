@@ -62,7 +62,7 @@ FieldPointsTo(b, f, o) :- Store(u, f, v), VarPointsTo(u, b), VarPointsTo(v, o).
 
 % Two variables may alias if they can point to a common object. Note
 % Alias(v, v) holds trivially for any v that points to anything -- the
-% usual guard is v != u, and probalog has no disequality.
+% usual side condition is v != u, and probalog has no disequality.
 Alias(v, u) :- VarPointsTo(v, o), VarPointsTo(u, o).
 
 % --- The certain part of the analysis -----------------------------------

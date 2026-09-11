@@ -4,15 +4,13 @@
 % People smoke from stress or from a friend's influence, and smokers
 % may develop asthma.
 %
-% Friendship is symmetric, so Smokes/1 recurses around cycles: each
-% round adds syntactically new disjuncts to a guard long after it has
-% stopped meaning anything new, which is what the SAT-based fixpoint
-% check is for. Alice and Bob share friends, so their guards share
-% base variables and the answers reflect that exactly.
+% Friendship is symmetric, so Smokes/1 recurses around cycles. Alice
+% and Bob share friends, so their chances of smoking are correlated
+% rather than independent, and the answers reflect that exactly.
 %
 % ProbLog writes probabilistic rules (`0.3::stress(X) :- person(X).`).
 % Probalog puts probabilities on facts only, so the same thing is a
-% certain rule guarded by a ground probabilistic fact. Stress/1,
+% certain rule together with a ground probabilistic fact. Stress/1,
 % Influences/2 and AsthmaProne/1 are all of that kind -- not data,
 % but the rules' coin flips made explicit.
 
@@ -23,7 +21,7 @@
 %         carol --- dave --- erin
 %
 % Stated in both directions rather than closed by a rule, which would
-% double every guard for no gain.
+% add nothing but redundant derivations.
 
 Friend("alice", "bob").
 Friend("bob",   "alice").

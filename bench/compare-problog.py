@@ -55,35 +55,48 @@ HEADER = "#lang roulette/example/probalog"
 # wants the reverse, with constants quoted.
 # --------------------------------------------------------------------------
 
-def _reach_pair(edges, target, p, numeric=True):
-    """Transitive closure over `edges`, querying reachability 0 -> target."""
-    def rk_const(x):
-        return str(x) if numeric else f'"{x}"'
+def _reach_pair(edges, target, p, nodes=None, all_queries=False):
+    """Transitive closure over `edges`.
+
+    With all_queries, both programs are asked for the *entire* reach
+    relation rather than one tuple. That matters for fairness: probalog
+    computes the whole relation whatever you ask it, while ProbLog
+    derives only what the query needs. Comparing one probalog run
+    against a single ProbLog query charges probalog for work its
+    opponent never does.
+    """
     pl = [f"{p}::edge({u},{v})." for u, v in edges]
     pl += ["reach(X,Y) :- edge(X,Y).",
-           "reach(X,Z) :- reach(X,Y), edge(Y,Z).",
-           f"query(reach({edges[0][0]},{target}))."]
+           "reach(X,Z) :- reach(X,Y), edge(Y,Z)."]
     rk = [HEADER]
-    rk += [f"Edge({rk_const(u)}, {rk_const(v)}) :: {p}." for u, v in edges]
+    rk += [f"Edge({u}, {v}) :: {p}." for u, v in edges]
     rk += ["Reach(x, y) :- Edge(x, y).",
-           "Reach(x, z) :- Reach(x, y), Edge(y, z).",
-           f"? Reach({rk_const(edges[0][0])}, {rk_const(target)})."]
+           "Reach(x, z) :- Reach(x, y), Edge(y, z)."]
+    if all_queries:
+        ns = nodes if nodes is not None else sorted({n for e in edges for n in e})
+        pl += [f"query(reach({i},{j}))." for i in ns for j in ns]
+        rk += [f"? Reach({i}, {j})." for i in ns for j in ns]
+    else:
+        pl.append(f"query(reach({edges[0][0]},{target})).")
+        rk.append(f"? Reach({edges[0][0]}, {target}).")
     return "\n".join(pl), "\n".join(rk)
 
 
-def gen_ring(n, p=0.9):
+def gen_ring(n, p=0.9, all_queries=False):
     """A simple directed cycle. Every derivation is a single path."""
-    return _reach_pair([(i, (i + 1) % n) for i in range(n)], n // 2, p)
+    return _reach_pair([(i, (i + 1) % n) for i in range(n)], n // 2, p,
+                       nodes=range(n), all_queries=all_queries)
 
 
-def gen_chordring(n, chord=3, p=0.85):
+def gen_chordring(n, chord=3, p=0.85, all_queries=False):
     """A cycle plus chords: dense, cyclic, facts re-derived many ways."""
     edges = [(i, (i + 1) % n) for i in range(n)]
     edges += [(i, (i + chord) % n) for i in range(n)]
-    return _reach_pair(edges, n // 2, p)
+    return _reach_pair(edges, n // 2, p, nodes=range(n),
+                       all_queries=all_queries)
 
 
-def gen_dag(layers, width, p=0.9):
+def gen_dag(layers, width, p=0.9, all_queries=False):
     """Layered DAG, fully connected between adjacent layers.
 
     width**layers distinct src->sink paths, all the same length, so
@@ -98,17 +111,22 @@ def gen_dag(layers, width, p=0.9):
     edges += [(node(layers - 1, j), "sink") for j in range(width)]
     pl = [f"{p}::edge({u},{v})." for u, v in edges]
     pl += ["path(X,Y) :- edge(X,Y).",
-           "path(X,Z) :- path(X,Y), edge(Y,Z).",
-           "query(path(src,sink))."]
+           "path(X,Z) :- path(X,Y), edge(Y,Z)."]
     rk = [HEADER]
     rk += [f'Edge("{u}", "{v}") :: {p}.' for u, v in edges]
     rk += ["Path(x, y) :- Edge(x, y).",
-           "Path(x, z) :- Path(x, y), Edge(y, z).",
-           '? Path("src", "sink").']
+           "Path(x, z) :- Path(x, y), Edge(y, z)."]
+    if all_queries:
+        ns = sorted({n for e in edges for n in e})
+        pl += [f"query(path({i},{j}))." for i in ns for j in ns]
+        rk += [f'? Path("{i}", "{j}").' for i in ns for j in ns]
+    else:
+        pl.append("query(path(src,sink)).")
+        rk.append('? Path("src", "sink").')
     return "\n".join(pl), "\n".join(rk)
 
 
-def gen_smokers(n, pstress=0.2, pinf=0.3):
+def gen_smokers(n, pstress=0.2, pinf=0.3, all_queries=False):
     """Friends & smokers on a friendship ring: recursion around cycles."""
     pl, rk = [], []
     for i in range(n):
@@ -123,12 +141,16 @@ def gen_smokers(n, pstress=0.2, pinf=0.3):
                f'Influences("p{i}", "p{j}") :: {pinf}.',
                f'Influences("p{j}", "p{i}") :: {pinf}.']
     pl += ["smokes(X) :- stress(X).",
-           "smokes(X) :- friend(X,Y), smokes(Y), influences(Y,X).",
-           "query(smokes(p0))."]
+           "smokes(X) :- friend(X,Y), smokes(Y), influences(Y,X)."]
     rk = [HEADER] + rk + [
         "Smokes(x) :- Stress(x).",
-        "Smokes(x) :- Friend(x, y), Smokes(y), Influences(y, x).",
-        '? Smokes("p0").']
+        "Smokes(x) :- Friend(x, y), Smokes(y), Influences(y, x)."]
+    if all_queries:
+        pl += [f"query(smokes(p{i}))." for i in range(n)]
+        rk += [f'? Smokes("p{i}").' for i in range(n)]
+    else:
+        pl.append("query(smokes(p0)).")
+        rk.append('? Smokes("p0").')
     return "\n".join(pl), "\n".join(rk)
 
 
@@ -262,7 +284,7 @@ def run_suite(name, spec, args, tmpdir):
     print(cols + ("  monte carlo" if args.verify and spec["mc"] else ""))
 
     for params in sizes:
-        pl_src, rk_src = spec["gen"](*params)
+        pl_src, rk_src = spec["gen"](*params, all_queries=args.all_queries)
         pl_path = os.path.join(tmpdir, "m.pl")
         rk_path = os.path.join(tmpdir, "m.rkt")
         with open(pl_path, "w") as f:
@@ -272,8 +294,10 @@ def run_suite(name, spec, args, tmpdir):
 
         tp, op = timed([PROBLOG, "-k", args.backend, pl_path], args.timeout)
         tr, orr = timed([RACKET, rk_path], args.timeout)
-        vp = problog_prob(op) if tp else None
-        vr = probalog_prob(orr) if tr else None
+        # With every tuple queried the output is a table, not one
+        # answer, so the single-answer agreement check does not apply.
+        vp = None if args.all_queries else (problog_prob(op) if tp else None)
+        vr = None if args.all_queries else (probalog_prob(orr) if tr else None)
 
         if vp is not None and vr is not None:
             agree = "yes" if abs(vp - vr) < 1e-6 else "NO"
@@ -301,11 +325,15 @@ def main():
                     help="suites to run (default: all)")
     ap.add_argument("--quick", action="store_true",
                     help="small sizes only, for a fast sanity run")
-    ap.add_argument("--timeout", type=float, default=60,
-                    help="per-run timeout in seconds (default 60)")
+    ap.add_argument("--timeout", type=float, default=10,
+                    help="per-run timeout in seconds (default 10)")
     ap.add_argument("--backend", default="sdd",
                     help="ProbLog knowledge compiler; 'ddnnf' reproduces "
                          "the wrong answers noted above (default sdd)")
+    ap.add_argument("--all-queries", action="store_true",
+                    help="ask both systems for the entire relation, not one "
+                         "tuple. probalog computes it all regardless, so "
+                         "this is the equal-work comparison")
     ap.add_argument("--verify", action="store_true",
                     help="also estimate each answer by Monte Carlo")
     ap.add_argument("--trials", type=int, default=200000,
@@ -319,7 +347,8 @@ def main():
                  "  python3 -m venv /tmp/problog-venv\n"
                  "  /tmp/problog-venv/bin/pip install problog pysdd")
 
-    print(f"probalog vs ProbLog   backend={args.backend}  timeout={args.timeout}s")
+    print(f"probalog vs ProbLog   ProbLog backend={args.backend}  "
+          f"timeout={args.timeout}s")
     print("wall clock includes interpreter startup: ~0.3s racket, ~0.1s problog,")
     print("so anything under a second or so is noise.")
 
